@@ -1,0 +1,10 @@
+{
+  "name": "Orthopedic Assessment Platform",
+  "description": "Multi-scale clinical assessment tool for orthopedic patients. Supports VAS, Constant-Murley, ASES, QuickDASH, UCLA, and WORC scales. Features patient information splitting (First/Middle/Last name), administrative panel with Excel export, and real-time data storage via Firebase.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}

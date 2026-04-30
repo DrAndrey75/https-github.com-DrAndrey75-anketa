@@ -1,0 +1,144 @@
+=========================================
+ОртоПлатформа: Полный исходный код проекта
+=========================================
+
+--- Файл: package.json ---
+{
+  "name": "react-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "vite build",
+    "preview": "vite preview",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit",
+    "start": "node server.ts"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "express": "^4.21.2",
+    "firebase": "^12.12.0",
+    "lucide-react": "^0.546.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.5.0",
+    "tsx": "^4.21.0",
+    "vite": "^6.2.0",
+    "xlsx": "^0.18.5"
+  }
+}
+
+--- Файл: server.ts ---
+import express from "express";
+import { createServer as createViteServer } from "vite";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.resolve(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    
+    app.get("/index.html", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", (): void => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();
+
+--- Файл: src/App.tsx ---
+[... Содержимое App.tsx (см. в редакторе или ниже) ...]
+(Поскольку файл очень длинный, он включен в основной ответ)
+
+--- Файл: src/firebase.ts ---
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import firebaseConfig from './firebase-config.json';
+
+const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const auth = getAuth(app);
+
+--- Файл: src/types.ts ---
+export type ScaleType = 'VAS' | 'CONSTANT' | 'ASES' | 'QUICKDASH' | 'UCLA' | 'WORC';
+
+export interface Question {
+  id: string;
+  text: string;
+  type: 'radio' | 'slider' | 'select' | 'boolean';
+  options?: { value: number; label: string }[];
+  minLabel?: string;
+  maxLabel?: string;
+}
+
+export interface ScaleDefinition {
+  id: ScaleType;
+  title: string;
+  description: string;
+  calculateScore: (responses: Record<string, number>) => number;
+  sections: {
+    title?: string;
+    questions: Question[];
+  }[];
+}
+
+export interface Submission {
+  id?: string;
+  patientLastName: string;
+  patientFirstName: string;
+  patientMiddleName: string;
+  patientPhone?: string;
+  scaleType: ScaleType;
+  responses: Record<string, number>;
+  score: number;
+  createdAt: any;
+  status: 'pending' | 'reviewed';
+}
+
+--- Файл: firestore.rules ---
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email_verified == true &&
+             (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+              request.auth.token.email == 'doctor.zhilyakov@gmail.com');
+    }
+    match /submissions/{submissionId} {
+      allow create: if true; // Временное упрощение для экспорта
+      allow read, write: if isAdmin();
+    }
+  }
+}

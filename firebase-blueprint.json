@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "patient": {
+      "title": "Patient",
+      "description": "Patient basic information for identification",
+      "type": "object",
+      "properties": {
+        "lastName": { "type": "string" },
+        "firstName": { "type": "string" },
+        "middleName": { "type": "string" },
+        "phone": { "type": "string" },
+        "dateOfBirth": { "type": "string", "format": "date" }
+      },
+      "required": ["lastName", "firstName", "phone"]
+    },
+    "submission": {
+      "title": "Form Submission",
+      "description": "A completion of a specific medical assessment scale",
+      "type": "object",
+      "properties": {
+        "patientLastName": { "type": "string" },
+        "patientFirstName": { "type": "string" },
+        "patientMiddleName": { "type": "string" },
+        "patientPhone": { "type": "string" },
+        "scaleType": { "type": "string", "enum": ["VAS", "CONSTANT", "ASES", "QUICKDASH", "UCLA", "WORC"] },
+        "responses": { "type": "object" },
+        "score": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "reviewed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["lastName", "firstName", "scaleType", "responses", "score", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/patients/{patientId}": {
+      "schema": "patient",
+      "description": "Registered patients list"
+    },
+    "/submissions/{submissionId}": {
+      "schema": "submission",
+      "description": "Store all scale assessment results"
+    }
+  }
+}

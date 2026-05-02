@@ -27,7 +27,7 @@ export default function App() {
   }, []);
 
   const [errorInfo, setErrorInfo] = useState<string>('');
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(import.meta.env.VITE_DEMO !== 'true');
   const [view, setView] = useState<'home' | 'form' | 'admin' | 'success'>('home');
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -69,6 +69,7 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    if (import.meta.env.VITE_DEMO === 'true') return;
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (u?.email === import.meta.env.VITE_ADMIN_EMAIL) {

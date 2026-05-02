@@ -1,70 +1,74 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ─────────────────────────────────────────────
-# ОртоПлатформа — автоматическая установка
-# Использование: bash setup.sh
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════
+# ОртоПлатформа — полная автоматическая установка
+# Использование:  bash setup.sh
+# ══════════════════════════════════════════════════════════
 
-BOLD='\033[1m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+BOLD='\033[1m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
 
-info()    { echo -e "${CYAN}▶ $*${NC}"; }
-success() { echo -e "${GREEN}✔ $*${NC}"; }
-warn()    { echo -e "${YELLOW}⚠ $*${NC}"; }
-error()   { echo -e "${RED}✘ $*${NC}"; exit 1; }
-header()  { echo -e "\n${BOLD}═══ $* ═══${NC}\n"; }
+info()    { echo -e "${CYAN}▶  $*${NC}"; }
+success() { echo -e "${GREEN}✔  $*${NC}"; }
+warn()    { echo -e "${YELLOW}⚠  $*${NC}"; }
+error()   { echo -e "${RED}✘  $*${NC}"; exit 1; }
+header()  { echo -e "\n${BOLD}══════════════════════════════════\n   $*\n══════════════════════════════════${NC}\n"; }
+pause()   { read -rp "$(echo -e "${YELLOW}   ↳ Нажмите Enter чтобы продолжить...${NC}")" _; }
 
-# ─── 1. Node.js ───────────────────────────────
-header "Проверка Node.js"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if ! command -v node &>/dev/null; then
-  warn "Node.js не найден. Устанавливаю Node.js 22 LTS..."
-  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-  sudo apt-get install -y nodejs
-fi
+# ══ 1. Системные пакеты ══════════════════════════════════
+header "1/9 · Системные пакеты"
 
-NODE_MAJOR=$(node --version | sed 's/v//' | cut -d. -f1)
-if [ "$NODE_MAJOR" -lt 18 ]; then
-  error "Требуется Node.js 18+. Текущая версия: $(node --version)"
+info "Обновляю apt..."
+sudo apt-get update -qq
+
+# Node.js
+if ! command -v node &>/dev/null || [ "$(node --version | sed 's/v//' | cut -d. -f1)" -lt 18 ]; then
+  info "Устанавливаю Node.js 22 LTS..."
+  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - -qq
+  sudo apt-get install -y nodejs -qq
 fi
 success "Node.js $(node --version)"
 
-# ─── 2. Firebase CLI ──────────────────────────
-header "Firebase CLI"
+# Nginx
+if ! command -v nginx &>/dev/null; then
+  info "Устанавливаю Nginx..."
+  sudo apt-get install -y nginx -qq
+fi
+success "Nginx $(nginx -v 2>&1 | grep -o '[0-9.]*$')"
 
+# ufw
+if ! command -v ufw &>/dev/null; then
+  sudo apt-get install -y ufw -qq
+fi
+
+# Firebase CLI
 if ! command -v firebase &>/dev/null; then
   info "Устанавливаю Firebase CLI..."
-  sudo npm install -g firebase-tools
+  sudo npm install -g firebase-tools --quiet
 fi
 success "Firebase CLI $(firebase --version)"
 
-# ─── 3. npm зависимости ───────────────────────
-header "Зависимости npm"
-
-info "npm install..."
+# ══ 2. npm зависимости ═══════════════════════════════════
+header "2/9 · npm зависимости"
 npm install
 success "Зависимости установлены"
 
-# ─── 4. .env.local ────────────────────────────
-header "Конфигурация приложения (.env.local)"
+# ══ 3. Переменные окружения (.env.local) ═════════════════
+header "3/9 · Настройка приложения (.env.local)"
 
 if [ -f ".env.local" ]; then
-  warn ".env.local уже существует. Пропускаю."
+  warn ".env.local уже существует — пропускаю."
 else
-  echo "Укажите email Google-аккаунта врача-администратора."
-  echo "Именно с этого аккаунта будет доступна Панель врача."
-  echo ""
+  echo "  Email Google-аккаунта врача (именно с него будет доступна Панель врача):"
   read -rp "  Admin email: " ADMIN_EMAIL
 
   echo ""
-  echo "URL-префикс для приложения."
-  echo "Пример: /anketa-2025/  →  http://ВАШ_IP/anketa-2025/"
-  echo "Должен начинаться и заканчиваться на /"
+  echo "  URL-путь к приложению, например  /anketa-2025/"
+  echo "  Пациенты будут заходить:  http://$(hostname -I | awk '{print $1}')/anketa-2025/"
+  echo "  Должен начинаться и заканчиваться на /"
   read -rp "  Base path [/anketa-2025/]: " BASE_PATH
   BASE_PATH="${BASE_PATH:-/anketa-2025/}"
 
@@ -75,28 +79,25 @@ EOF
   success ".env.local создан"
 fi
 
-# ─── 5. firebase-config.json ──────────────────
-header "Конфигурация Firebase (src/firebase-config.json)"
+# ══ 4. Firebase-конфиг ═══════════════════════════════════
+header "4/9 · Firebase-конфиг (src/firebase-config.json)"
 
 if [ -f "src/firebase-config.json" ]; then
-  warn "src/firebase-config.json уже существует. Пропускаю."
+  warn "src/firebase-config.json уже существует — пропускаю."
 else
-  echo "Откройте https://console.firebase.google.com"
-  echo "Выберите проект → Project Settings → Your apps → Web app → Config"
+  echo "  Откройте: https://console.firebase.google.com"
+  echo "  Выберите проект → ⚙ Project Settings → Your apps → Web app → Config"
+  echo "  Скопируйте значения и вставьте ниже:"
   echo ""
-
-  read -rp "  Project ID:           " FB_PROJECT_ID
-  read -rp "  App ID:               " FB_APP_ID
-  read -rp "  Web API Key:          " FB_API_KEY
-  read -rp "  Auth Domain [${FB_PROJECT_ID}.firebaseapp.com]: " FB_AUTH_DOMAIN
+  read -rp "  projectId:          " FB_PROJECT_ID
+  read -rp "  appId:              " FB_APP_ID
+  read -rp "  apiKey:             " FB_API_KEY
+  read -rp "  authDomain [${FB_PROJECT_ID}.firebaseapp.com]: " FB_AUTH_DOMAIN
   FB_AUTH_DOMAIN="${FB_AUTH_DOMAIN:-${FB_PROJECT_ID}.firebaseapp.com}"
-  read -rp "  Storage Bucket [${FB_PROJECT_ID}.firebasestorage.app]: " FB_STORAGE
+  read -rp "  storageBucket [${FB_PROJECT_ID}.firebasestorage.app]: " FB_STORAGE
   FB_STORAGE="${FB_STORAGE:-${FB_PROJECT_ID}.firebasestorage.app}"
-  read -rp "  Messaging Sender ID:  " FB_SENDER_ID
-  echo ""
-  echo "Firestore Database ID."
-  echo "Если не создавали кастомную базу — введите: (default)"
-  read -rp "  Database ID [(default)]: " FB_DB_ID
+  read -rp "  messagingSenderId:  " FB_SENDER_ID
+  read -rp "  Firestore DB ID [(default)]: " FB_DB_ID
   FB_DB_ID="${FB_DB_ID:-(default)}"
 
   cat > src/firebase-config.json <<EOF
@@ -114,74 +115,76 @@ EOF
   success "src/firebase-config.json создан"
 fi
 
-# Читаем projectId из конфига для firebase CLI
-FB_PROJECT_ID=$(node -e "const c=require('./src/firebase-config.json'); console.log(c.projectId);")
+FB_PROJECT_ID=$(node -e "process.stdout.write(require('./src/firebase-config.json').projectId)")
+SERVER_IP=$(hostname -I | awk '{print $1}')
+BASE_PATH_VAL=$(grep VITE_BASE_PATH .env.local | cut -d= -f2 | tr -d '"')
 
-# ─── 6. Firebase: авторизация и деплой правил ─
-header "Синхронизация Firebase (правила Firestore)"
+# ══ 5. Google Auth в Firebase ════════════════════════════
+header "5/9 · Включение Google Sign-In в Firebase"
 
-echo "Нужна авторизация в Firebase CLI."
-firebase login --no-localhost 2>/dev/null || firebase login
+echo "  Это нужно сделать один раз вручную (Firebase CLI не умеет это автоматизировать)."
+echo ""
+echo -e "  ${BOLD}Шаги:${NC}"
+echo "  1. Откройте: https://console.firebase.google.com/project/${FB_PROJECT_ID}/authentication/providers"
+echo "  2. Нажмите «Google» → Enable → Save"
+echo ""
+echo "  3. Добавьте ваш IP как авторизованный домен:"
+echo "     https://console.firebase.google.com/project/${FB_PROJECT_ID}/authentication/settings"
+echo "     Authorized domains → Add domain → введите: ${SERVER_IP}"
+echo ""
+pause
 
-info "Устанавливаю активный проект Firebase: ${FB_PROJECT_ID}"
-firebase use "${FB_PROJECT_ID}" --add 2>/dev/null || firebase use "${FB_PROJECT_ID}"
+# ══ 6. Firebase CLI: авторизация и деплой ════════════════
+header "6/9 · Синхронизация Firebase (правила и индексы)"
+
+echo "  Требуется войти в Firebase CLI."
+echo "  Если браузер недоступен на этом сервере — выберите вариант с кодом."
+echo ""
+firebase login --no-localhost || firebase login
+
+info "Активирую проект: ${FB_PROJECT_ID}"
+firebase use "${FB_PROJECT_ID}" 2>/dev/null || firebase use --add
 
 info "Деплой правил Firestore..."
 firebase deploy --only firestore:rules
-success "Правила Firestore синхронизированы"
+success "Правила Firestore обновлены"
 
 info "Деплой индексов Firestore..."
 firebase deploy --only firestore:indexes
-success "Индексы Firestore синхронизированы"
+success "Индексы Firestore обновлены"
 
-# ─── 7. Первый администратор ──────────────────
-header "Первый администратор"
-
-ADMIN_EMAIL_FROM_ENV=$(grep VITE_ADMIN_EMAIL .env.local | cut -d= -f2 | tr -d '"')
-
-echo "Для входа в Панель врача нужно добавить UID администратора в коллекцию admins."
-echo ""
-echo "Шаги:"
-echo "  1. Войдите в https://console.firebase.google.com → ваш проект"
-echo "  2. Authentication → Users → найдите ${ADMIN_EMAIL_FROM_ENV}"
-echo "  3. Скопируйте UID (колонка User UID)"
-echo "  4. Firestore Database → Create collection: admins"
-echo "     Document ID = UID из шага 3"
-echo "     Добавьте поле: email (string) = ${ADMIN_EMAIL_FROM_ENV}"
-echo ""
-read -rp "Нажмите Enter когда сделаете → " _
-
-# ─── 8. Сборка ────────────────────────────────
-header "Сборка проекта"
+# ══ 7. Сборка ════════════════════════════════════════════
+header "7/9 · Сборка проекта"
 
 npm run build
 success "Сборка завершена → dist/"
 
-# ─── 9. Nginx ─────────────────────────────────
-header "Настройка Nginx"
+# ══ 8. Nginx ═════════════════════════════════════════════
+header "8/9 · Nginx — изолированный веб-сервер"
 
-BASE_PATH_TRIMMED=$(grep VITE_BASE_PATH .env.local | cut -d= -f2 | tr -d '"')
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NGINX_CONF="/etc/nginx/sites-available/ortho"
 
-if command -v nginx &>/dev/null; then
-  NGINX_CONF_PATH="/etc/nginx/sites-available/ortho"
-
-  sudo tee "${NGINX_CONF_PATH}" > /dev/null <<NGINXEOF
+sudo tee "${NGINX_CONF}" > /dev/null <<NGINXEOF
 server {
     listen 80;
     server_name _;
 
+    # ── Корень строго = папка сборки. Снаружи ничего не видно ──
     root ${SCRIPT_DIR}/dist;
     server_tokens off;
 
+    # Запросы на корень → 404 (скрываем сервер)
     location = / { return 404; }
 
-    location ${BASE_PATH_TRIMMED} {
-        try_files \$uri \$uri/ ${BASE_PATH_TRIMMED}index.html;
+    # Только этот путь работает для пациентов
+    location ${BASE_PATH_VAL} {
+        try_files \$uri \$uri/ ${BASE_PATH_VAL}index.html;
     }
 
+    # Всё остальное → 404
     location / { return 404; }
 
+    # Кэш статики
     location ~* \.(js|css|png|jpg|svg|woff2|ico)\$ {
         expires 30d;
         add_header Cache-Control "public, immutable";
@@ -189,25 +192,61 @@ server {
 }
 NGINXEOF
 
-  sudo ln -sf "${NGINX_CONF_PATH}" /etc/nginx/sites-enabled/ortho
-  sudo rm -f /etc/nginx/sites-enabled/default
-  sudo nginx -t && sudo systemctl restart nginx
-  success "Nginx настроен и перезапущен"
-else
-  warn "Nginx не найден. Установите: sudo apt install -y nginx"
-  warn "Затем запустите: bash setup.sh (шаг Nginx будет выполнен автоматически)"
-fi
+sudo ln -sf "${NGINX_CONF}" /etc/nginx/sites-enabled/ortho
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl restart nginx
+success "Nginx настроен и запущен"
 
-# ─── Итог ─────────────────────────────────────
-header "Готово"
+# ══ 8b. Firewall ══════════════════════════════════════════
+info "Настройка firewall (ufw)..."
+sudo ufw allow 22/tcp   comment 'SSH'  2>/dev/null || true
+sudo ufw allow 80/tcp   comment 'HTTP' 2>/dev/null || true
+sudo ufw --force enable 2>/dev/null || true
+success "Firewall: порты 22 (SSH) и 80 (HTTP) открыты"
 
-SERVER_IP=$(hostname -I | awk '{print $1}')
-success "Приложение доступно по адресу:"
-echo -e "\n  ${BOLD}http://${SERVER_IP}${BASE_PATH_TRIMMED}${NC}\n"
-echo "Пациенты могут заходить с любого устройства по этой ссылке."
+# ══ 9. Первый администратор ══════════════════════════════
+header "9/9 · Регистрация первого администратора"
+
+ADMIN_EMAIL_VAL=$(grep VITE_ADMIN_EMAIL .env.local | cut -d= -f2 | tr -d '"')
+
+echo "  Сначала врач должен хотя бы раз войти в приложение через Google."
 echo ""
-echo "Обновление после изменений в коде:"
+echo "  1. Откройте в браузере:"
+echo -e "     ${BOLD}http://${SERVER_IP}${BASE_PATH_VAL}${NC}"
+echo "     Нажмите «Вход для врача» и войдите как ${ADMIN_EMAIL_VAL}"
+echo ""
+echo "  2. После входа перейдите в Firebase Console:"
+echo "     https://console.firebase.google.com/project/${FB_PROJECT_ID}/authentication/users"
+echo "     Найдите ${ADMIN_EMAIL_VAL} → скопируйте User UID"
+echo ""
+echo "  3. Откройте Firestore:"
+echo "     https://console.firebase.google.com/project/${FB_PROJECT_ID}/firestore/data"
+echo "     + Start collection → ID: admins"
+echo "     + Add document → Document ID = UID из шага 2"
+echo "     + Add field: email (string) = ${ADMIN_EMAIL_VAL}"
+echo ""
+echo "  После этого при следующем входе врач автоматически увидит Панель врача."
+echo ""
+pause
+
+# ══ Итог ═════════════════════════════════════════════════
+echo ""
+echo -e "${BOLD}${GREEN}════════════════════════════════════"
+echo "  Установка завершена успешно!"
+echo -e "════════════════════════════════════${NC}"
+echo ""
+echo -e "  Ссылка для пациентов:"
+echo -e "  ${BOLD}http://${SERVER_IP}${BASE_PATH_VAL}${NC}"
+echo ""
+echo "  ─ Что защищено ─────────────────────────────────"
+echo "  ✔ Nginx отдаёт файлы ТОЛЬКО из: ${SCRIPT_DIR}/dist"
+echo "  ✔ Все другие пути на сервере → 404"
+echo "  ✔ Пациенты не могут читать чужие данные (правила Firestore)"
+echo "  ✔ Только один врач имеет доступ к результатам"
+echo ""
+echo "  ─ Обновление кода ───────────────────────────────"
 echo "  git pull && npm run build && sudo systemctl reload nginx"
 echo ""
-echo "Пересинхронизация правил Firestore:"
+echo "  ─ Повторная синхронизация правил БД ─────────────"
 echo "  firebase deploy --only firestore:rules"
+echo ""

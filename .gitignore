@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Firebase — реальный конфиг не коммитим, используем firebase-config.example.json
+src/firebase-config.json
+
+# Firebase CLI кэш
+.firebase/

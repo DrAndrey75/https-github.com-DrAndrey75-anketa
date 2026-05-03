@@ -3,7 +3,7 @@ export type ScaleType = 'VAS' | 'CONSTANT' | 'ASES' | 'QUICKDASH' | 'UCLA' | 'WO
 export interface Question {
   id: string;
   text: string;
-  type: 'radio' | 'slider' | 'select' | 'boolean';
+  type: 'slider';
   options?: { value: number; label: string }[];
   minLabel?: string;
   maxLabel?: string;

@@ -1,0 +1,104 @@
+---
+description: ОртоПлатформа — правила для AI-ассистента Cursor
+globs: ["**/*.ts", "**/*.tsx", "**/*.json", "**/*.rules", "**/*.sh"]
+alwaysApply: true
+---
+
+# ОртоПлатформа
+
+Веб-приложение для ортопедии: пациенты заполняют медицинские анкеты перед приёмом, врач-администратор видит результаты в своей панели.
+
+## Стек
+
+- **React 19 + TypeScript** (Vite 6)
+- **Firebase** — Firestore (БД) + Google Auth (авторизация)
+- **Tailwind CSS v4**
+- **xlsx** — экспорт в Excel
+
+## Архитектура файлов
+
+```
+src/
+  App.tsx                  — весь UI: home | form | admin | success
+  firebase.ts              — инициализация Firebase
+  firebase-config.json     — конфиг Firebase (НЕ коммитить в чужой репо)
+  firebase-config.example.json — шаблон для новых установок
+  types.ts                 — ScaleType, Question, ScaleDefinition, Submission
+  constants/scales.ts      — определения всех шкал (VAS, CONSTANT, ASES, QuickDASH, UCLA, WORC)
+  index.css                — глобальные стили
+
+firestore.rules            — правила безопасности Firestore
+firestore.indexes.json     — индексы Firestore
+firebase.json              — конфиг Firebase CLI (деплой rules/indexes)
+setup.sh                   — скрипт установки с нуля
+.env.local                 — VITE_ADMIN_EMAIL, VITE_BASE_PATH (НЕ в git)
+.env.example               — шаблон переменных окружения
+```
+
+## Ключевые концепции
+
+### Шкалы (scales.ts)
+Каждая шкала — объект `ScaleDefinition`:
+- `id: ScaleType` — идентификатор ('VAS' | 'CONSTANT' | 'ASES' | 'QUICKDASH' | 'UCLA' | 'WORC')
+- `calculateScore(responses)` — чистая функция подсчёта баллов
+- `sections[].questions[]` — все вопросы **только** `type: 'slider'`
+- Если у вопроса есть `options[]` — слайдер отображает метки; индекс → `options[i].value`
+- Если нет `options` — числовой слайдер 0–10 с `minLabel`/`maxLabel`
+
+### Авторизация
+- Пациент: анонимный доступ — только создание submission
+- Врач: Google Sign-In → email сравнивается с `import.meta.env.VITE_ADMIN_EMAIL`
+- Firestore: проверка через коллекцию `admins/{uid}` (добавляется вручную в Firebase Console)
+
+### URL-префикс
+`VITE_BASE_PATH` (например `/anketa-2025/`) задаётся в `.env.local` и передаётся в `vite.config.ts` как `base`. Nginx настроен обслуживать только этот путь.
+
+### Данные в Firestore
+Коллекция `submissions`:
+```ts
+{
+  patientLastName: string
+  patientFirstName: string
+  patientMiddleName: string
+  patientPhone: string
+  scaleType: ScaleType
+  responses: Record<string, number>   // { questionId: numericValue }
+  score: number
+  createdAt: Timestamp
+  status: 'pending' | 'reviewed'
+}
+```
+
+## Правила для AI
+
+1. **Все вопросы — слайдеры.** Тип `Question.type` строго `'slider'`. Не добавлять radio/checkbox.
+
+2. **Не менять логику calculateScore** без явной просьбы — это клинически валидированные формулы.
+
+3. **Новая шкала** добавляется только в `src/constants/scales.ts` и в `ScaleType` в `types.ts`. Логика рендеринга в `App.tsx` универсальна.
+
+4. **firestore.rules** — не хардкодить email. Права администратора только через коллекцию `admins`.
+
+5. **Переменные окружения** с префиксом `VITE_` доступны в браузере через `import.meta.env.VITE_*`.
+
+6. **setup.sh** при изменениях в Firebase (rules/indexes) должен включать `firebase deploy --only firestore:rules,firestore:indexes`.
+
+7. **Стиль кода**: Tailwind-классы через `cn()` (clsx + tailwind-merge), без inline styles.
+
+## Команды разработки
+
+```bash
+npm run dev      # dev-сервер (localhost:3000)
+npm run build    # production сборка → dist/
+npm run lint     # TypeScript check
+firebase deploy --only firestore:rules    # синхронизация правил БД
+firebase deploy --only firestore:indexes  # синхронизация индексов БД
+```
+
+## Деплой на Ubuntu (nginx)
+
+```bash
+bash setup.sh    # первая установка
+# Обновление:
+git pull && npm run build && sudo systemctl reload nginx
+```

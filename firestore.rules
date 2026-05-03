@@ -1,74 +1,62 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 0. Catch-all Deny
+
+    // Запрещаем всё, что не описано явно
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // --- Helpers ---
+    // ── Вспомогательные функции ─────────────────────────────────
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isEmailVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
-    }
-
+    // Администратор — подтверждённый пользователь с записью в коллекции admins.
+    // Первого администратора добавьте вручную через Firebase Console:
+    //   Firestore → admins → Document ID = UID пользователя
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email_verified == true || 
-        request.auth.token.email == 'doctor.zhilyakov@gmail.com'
-      ) && (
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        request.auth.token.email == 'doctor.zhilyakov@gmail.com'
-      );
+      return isSignedIn()
+          && request.auth.token.email_verified == true
+          && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    // --- Validation Blueprints ---
     function isValidSubmission(data) {
-      return data.keys().hasAll(['scaleType', 'responses', 'score', 'createdAt', 'patientLastName', 'patientFirstName', 'patientMiddleName', 'patientPhone', 'status']) &&
-             data.scaleType in ['VAS', 'CONSTANT', 'ASES', 'QUICKDASH', 'UCLA', 'WORC'] &&
-             data.score is number &&
-             data.responses is map &&
-             data.patientLastName is string &&
-             data.patientLastName.size() >= 1 &&
-             data.patientFirstName is string &&
-             data.patientFirstName.size() >= 1 &&
-             // Using serverTimestamp() in App.tsx maps to request.time
-             data.createdAt == request.time;
+      return data.keys().hasAll([
+               'scaleType', 'responses', 'score', 'createdAt',
+               'patientLastName', 'patientFirstName', 'patientMiddleName',
+               'patientPhone', 'status'
+             ])
+          && data.scaleType in ['VAS', 'CONSTANT', 'ASES', 'QUICKDASH', 'UCLA', 'WORC']
+          && data.score is number
+          && data.responses is map
+          && data.patientLastName is string
+          && data.patientLastName.size() >= 1
+          && data.patientFirstName is string
+          && data.patientFirstName.size() >= 1
+          && data.createdAt == request.time;
     }
 
-    // --- Collection Rules ---
-
-    // Admins Collection
+    // ── Коллекция admins ────────────────────────────────────────
     match /admins/{userId} {
       allow read: if isSignedIn();
-      // Only existing admins can add new ones via console usually, or we can bootstrap the first one.
+      // Запись — только через Firebase Console
     }
 
-    // Submissions Collection
+    // ── Коллекция submissions ───────────────────────────────────
     match /submissions/{submissionId} {
-      // Patients can create submissions without being signed in (for the pre-visit flow)
-      // but they MUST provide valid data.
-      allow create: if isValidSubmission(incoming());
-      
-      // Only admins can read, update, or delete submissions
-      allow get, list: if isAdmin();
+      // Пациент заполняет анкету без авторизации
+      allow create: if isValidSubmission(request.resource.data);
+
+      // Только администратор читает, обновляет, удаляет
+      allow get, list:    if isAdmin();
       allow update, delete: if isAdmin();
     }
 
-    // Patients Collection (Optional for tracking)
+    // ── Коллекция patients (опционально) ────────────────────────
     match /patients/{patientId} {
-      allow create: if isValidId(patientId);
+      allow create: if patientId is string && patientId.size() <= 128;
       allow read, write: if isAdmin();
     }
   }

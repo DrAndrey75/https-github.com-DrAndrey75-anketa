@@ -4,7 +4,7 @@ import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, writeB
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { SCALES } from './constants/scales';
 import { ScaleType, Submission } from './types';
-import { ClipboardList, User, ChevronRight, CheckCircle2, LayoutDashboard, LogOut, Activity, ArrowLeft, Download, Plus, X, Save } from 'lucide-react';
+import { ChevronRight, CheckCircle2, LayoutDashboard, LogOut, Activity, ArrowLeft, Download, Plus, Save } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import * as XLSX from 'xlsx';
@@ -27,7 +27,7 @@ export default function App() {
   }, []);
 
   const [errorInfo, setErrorInfo] = useState<string>('');
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(import.meta.env.VITE_DEMO !== 'true');
   const [view, setView] = useState<'home' | 'form' | 'admin' | 'success'>('home');
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -69,9 +69,10 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    if (import.meta.env.VITE_DEMO === 'true') return;
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
-      if (u?.email === 'doctor.zhilyakov@gmail.com') {
+      if (u?.email === import.meta.env.VITE_ADMIN_EMAIL) {
         setIsAdmin(true);
         setView('admin');
       } else {
@@ -448,36 +449,6 @@ export default function App() {
                               </div>
                             )}
 
-                            {q.type === 'radio' && q.options && (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {q.options.map((opt) => (
-                                  <label 
-                                    key={opt.value}
-                                    className={cn(
-                                      "flex items-start gap-4 p-4 border-2 rounded-2xl cursor-pointer transition-all",
-                                      allResponses[currentScaleType]?.[q.id] === opt.value 
-                                        ? "bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-100" 
-                                        : "bg-white border-slate-100 text-slate-600 hover:border-slate-200 hover:bg-slate-50"
-                                    )}
-                                  >
-                                    <input 
-                                      type="radio" name={q.id} className="sr-only"
-                                      onChange={() => handleResponseChange(currentScaleType, q.id, opt.value)}
-                                    />
-                                    <div className={cn(
-                                        "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5",
-                                        allResponses[currentScaleType]?.[q.id] === opt.value ? "border-white bg-white/20" : "border-slate-200"
-                                    )}>
-                                      {allResponses[currentScaleType]?.[q.id] === opt.value && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
-                                    </div>
-                                    <div className="space-y-0.5">
-                                      <span className="text-sm font-black block leading-none">{opt.value}</span>
-                                      <span className="text-xs font-medium leading-tight opacity-90">{opt.label}</span>
-                                    </div>
-                                  </label>
-                                ))}
-                              </div>
-                            )}
                           </div>
                         ))}
                       </div>
